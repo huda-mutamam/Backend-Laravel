@@ -117,6 +117,72 @@ class OrderController extends Controller
         ]);
     }
 
+    public function tracking($id)
+{
+    $order = Order::with(['sender', 'receiver'])->find($id);
+
+    if (!$order) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Order tidak ditemukan'
+        ], 404);
+    }
+
+    if ($order->status === 'Dibatalkan') {
+        return response()->json([
+            'success' => true,
+            'resi'    => $order->resi,
+            'service' => 'Service #' . $order->service_id,
+            'tracking' => [
+                [
+                    'status' => 'Pesanan dibatalkan',
+                    'location' => '-',
+                    'time' => $order->updated_at->format('d M Y, H:i'),
+                    'isCompleted' => true,
+                ]
+            ],
+        ]);
+    }
+
+    $senderAddress   = $order->sender->alamat_asal ?? 'Lokasi pengirim';
+    $receiverAddress = $order->receiver->alamat_tujuan ?? 'Lokasi tujuan';
+
+    $steps = [
+        ['status' => 'Pesanan diterima',        'location' => $senderAddress],
+        ['status' => 'Paket dijemput kurir',    'location' => $senderAddress],
+        ['status' => 'Paket dalam pengiriman',  'location' => 'Menuju ' . $receiverAddress],
+        ['status' => 'Paket telah diterima',    'location' => $receiverAddress],
+    ];
+
+    $statusMap = [
+        'Menunggu' => 0,
+        'Diproses' => 1,
+        'Dikirim'  => 2,
+        'Sampai'   => 3,
+    ];
+
+    $currentIndex = $statusMap[$order->status] ?? 0;
+
+    $tracking = [];
+    foreach ($steps as $i => $step) {
+        $tracking[] = [
+            'status'      => $step['status'],
+            'location'    => $step['location'],
+            'time'        => $i <= $currentIndex
+                                ? $order->updated_at->format('d M Y, H:i')
+                                : '-',
+            'isCompleted' => $i <= $currentIndex,
+        ];
+    }
+
+    return response()->json([
+        'success' => true,
+        'resi'    => $order->resi,
+        'service' => 'Service #' . $order->service_id,
+        'tracking' => $tracking,
+    ]);
+}
+
     /**
      * ✏️ UPDATE STATUS
      */
